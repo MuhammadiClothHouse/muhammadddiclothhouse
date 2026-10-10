@@ -233,7 +233,7 @@ footer a{cursor:pointer}footer a:hover{color:var(--gold)}
 <button class="wa" id="ocb" onclick="sendOrder()">ORDER CONFIRM</button>
 <button class="bk" onclick="backToCart()">&larr; Back to Cart</button><button class="bk" onclick="closeAll()">Continue Shopping</button>
 <p class="mu" style="margin-top:8px;text-align:center">Please check your details, then press Order Confirm.</p></div>
-<div class="modal" id="ok"><div class="okw"><svg class="tick" viewBox="0 0 52 52"><circle class="tc" cx="26" cy="26" r="24"/><path class="tp" d="M14 27l8 8 16-17"/></svg><h3 class="serif">Order Confirmed!</h3><p>Your order has been placed successfully. Thank you!</p><p class="mu" id="okn" style="margin:8px 0"></p><button class="bk" onclick="closeAll()">Continue Shopping</button></div></div>
+<div class="modal" id="ok"><div class="okw"><svg class="tick" viewBox="0 0 52 52"><circle class="tc" cx="26" cy="26" r="24"/><path class="tp" d="M14 27l8 8 16-17"/></svg><h3 class="serif">Order Confirmed!</h3><p>Your order has been placed successfully. Thank you!</p><p class="mu" id="okn" style="margin:8px 0"></p><a class="wa" id="owa" target="_blank" rel="noopener" style="display:block;text-align:center">SEND ORDER ON WHATSAPP</a><p class="mu" style="font-size:12px;margin-top:6px">Tap the button and press Send in WhatsApp to share your order with us too.</p><button class="bk" onclick="closeAll()">Continue Shopping</button></div></div>
 
 <script>
 // ===== SETTINGS: apni values yahan likhein =====
@@ -247,6 +247,9 @@ var SOCIAL = {
 };
 // Google Sheet orders: Apps Script ka "Web app URL" (/exec wala) yahan paste karein
 var SHEET_URL = "https://script.google.com/macros/s/AKfycbyTH7v0yinUeNR2ARb0ZpBtpDCwzGBPWJ8T9V9vM4huKxgWLxTRaWtr_kjwcPXqky1p/exec";
+// Order confirm hone ke baad customer ke liye WhatsApp (aap ke number par order message) khud kholne ki koshish.
+// true = khud kholta hai (agar phone block kare to neeche "SEND ORDER ON WHATSAPP" button aata hai). false = sirf button.
+var WA_AUTO = true;
 // ===== CUSTOMER REVIEWS: sirf asli customers ke reviews yahan likhein =====
 // Khali [] ho to website par reviews ka section nazar nahi aata. Har review ek line:
 // {n:"Customer ka naam",city:"Sheher",stars:5,t:"Customer ne jo likha wo yahan"},
@@ -281,20 +284,35 @@ P.forEach(function(x){
  if(x.s>0){if(x.o)x.p=Math.round(x.o*(1-x.s/100));else x.o=Math.round(x.p/(1-x.s/100))}
  else if(x.o&&x.o>x.p)x.s=Math.round((x.o-x.p)/x.o*100);
  else x.s=0});
-var cat="All", cart=JSON.parse(localStorage.getItem("mch_cart")||"{}");
+var cat="All", cart={};
+try{cart=JSON.parse(localStorage.getItem("mch_cart")||"{}")||{}}catch(e){cart={}}
+for(var cid in cart){if(!P.filter(function(p){return p.id==cid})[0])delete cart[cid]}
 var EDIT=false;
 function $(i){return document.getElementById(i)}
 function rs(n){return "Rs. "+n.toLocaleString("en-PK")}
 // photo hamesha cover (photo code se aati hai, 4:5 size behtar)
-function codeImg(x,k){var t=String(k),i=t.indexOf("-")>0?parseInt(t.split("-")[1],10)-1:0,a=[x.img].concat(x.imgs||[]),u=a[i];return u?u+"?v="+IMG_VER:""}
+function imPath(x,k){var t=String(k),i=t.indexOf("-")>0?parseInt(t.split("-")[1],10)-1:0,a=[x.img].concat(x.imgs||[]);return a[i]||""}
+function codeImg(x,k){var u=imPath(x,k);return u?(OKURL[u]||u)+"?v="+IMG_VER:""}
+// ===== PHOTO FINDER: agar photo ka naam/extension thora alag ho (P1.JPG, p1.png ...) to khud dhoondh leta hai =====
+var OKURL={},EXTS=["jpg","jpeg","png","webp","JPG","JPEG","PNG","WEBP"],RR=0;
+function cands(p){var m=/^(.*\/)?([^\/]+?)(\.[A-Za-z0-9]+)?$/.exec(p),d=m[1]||"",b=m[2],ds=[d],bs=[b],o=[p],i,j,k;
+ if(d){var D=d.charAt(0).toUpperCase()+d.slice(1);if(D!=d)ds.push(D)}
+ var B=b.charAt(0).toUpperCase()+b.slice(1);if(B!=b)bs.push(B);
+ for(i=0;i<ds.length;i++)for(j=0;j<bs.length;j++)for(k=0;k<EXTS.length;k++){var u=ds[i]+bs[j]+"."+EXTS[k];if(o.indexOf(u)<0)o.push(u)}
+ return o}
+function findImg(p,cb){var c=cands(p),j=0;(function t(){if(j>=c.length){cb("");return}var im=new Image();im.onload=function(){cb(c[j])};im.onerror=function(){j++;t()};im.src=c[j]+"?v="+IMG_VER})()}
+function fixImgs(){var n=document.querySelectorAll("[data-im]"),seen={};
+ for(var i=0;i<n.length;i++){var p=n[i].getAttribute("data-im");n[i].removeAttribute("data-im");if(!p||OKURL[p]||seen[p])continue;seen[p]=1;
+  (function(p){findImg(p,function(u){OKURL[p]=u||p;if(u&&u!=p){clearTimeout(RR);RR=setTimeout(rerender,150)}})})(p)}}
+function rerender(){render();draw();if(/^#p\d+$/.test(location.hash))route()}
 function bgk(x,k){var im=codeImg(x,k),g="linear-gradient(160deg,"+x.a+","+x.b+")";return im?"url("+im+") center/cover no-repeat,"+g:"repeating-linear-gradient(45deg,rgba(255,255,255,.12) 0 6px,transparent 6px 12px),"+g}
 function bg(x){return bgk(x,x.id)}
 function setCat(c){cat=c;var t=document.querySelectorAll(".tab");for(var i=0;i<t.length;i++)t[i].classList.toggle("on",t[i].textContent==c);render()}
-function cardHTML(x){return '<div class="card rv"><div class="img" onclick="openP('+x.id+')" style="cursor:pointer"><div class="ph" style="background:'+bg(x)+'"></div>'+(x.s?'<span class="badge">SALE '+x.s+'%</span>':'')+'</div><div class="info"><h3 style="cursor:pointer" onclick="openP('+x.id+')">'+x.n+'</h3><div class="mu">'+[x.f,x.pc,x.c].filter(Boolean).join(' | ')+'</div><div class="price">'+rs(x.p)+(x.s?'<s>'+rs(x.o)+'</s>':'')+'</div><div class="cb"><button class="add" onclick="add('+x.id+')">ADD TO CART</button><button class="buy" onclick="buy1('+x.id+')">BUY NOW</button></div></div></div>'}
+function cardHTML(x){return '<div class="card rv"><div class="img" onclick="openP('+x.id+')" style="cursor:pointer"><div class="ph" data-im="'+(x.img||"")+'" style="background:'+bg(x)+'"></div>'+(x.s?'<span class="badge">SALE '+x.s+'%</span>':'')+'</div><div class="info"><h3 style="cursor:pointer" onclick="openP('+x.id+')">'+x.n+'</h3><div class="mu">'+[x.f,x.pc,x.c].filter(Boolean).join(' | ')+'</div><div class="price">'+rs(x.p)+(x.s?'<s>'+rs(x.o)+'</s>':'')+'</div><div class="cb"><button class="add" onclick="add('+x.id+')">ADD TO CART</button><button class="buy" onclick="buy1('+x.id+')">BUY NOW</button></div></div></div>'}
 function render(){
  var q=$("q").value.toLowerCase(),s=$("sort").value,l=P.filter(function(x){return(cat=="All"||x.c==cat)&&(x.n+x.f+x.c).toLowerCase().indexOf(q)>-1});
  if(s=="l")l.sort(function(a,b){return a.p-b.p});if(s=="h")l.sort(function(a,b){return b.p-a.p});
- $("grid").innerHTML=l.length?l.map(cardHTML).join(""):'<p class="mu" style="grid-column:1/-1;text-align:center">No suits found.</p>';reveal()}
+ $("grid").innerHTML=l.length?l.map(cardHTML).join(""):'<p class="mu" style="grid-column:1/-1;text-align:center">No suits found.</p>';reveal();fixImgs()}
 function save(){localStorage.setItem("mch_cart",JSON.stringify(cart));draw()}
 function add(id){cart[id]=(cart[id]||0)+1;save();openCart()}
 function buy1(id){cart[id]=(cart[id]||0)+1;save();openCheckout()}
@@ -320,8 +338,8 @@ function sendOrder(){
  var data={order:no,name:nm,phone:pn,city:ct,address:ad,items:items.join("\n"),subtotal:t,delivery:sh,total:t+sh,payment:pay};
  var b=$("ocb");b.disabled=true;b.textContent="Placing order...";
  fetch(SHEET_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(data)})
- .then(function(){cart={};save();$("md").classList.remove("on");$("okn").textContent="Order No: "+no;$("ok").classList.add("on");$("nm").value="";$("ph").value="";$("ct").value="";$("ad").value=""})
- .catch(function(){toast("Internet problem. Please try again.")})
+ .then(function(){var wm="*New Order - Muhammadi Cloth House*\nOrder No: "+no+"\n\n"+items.join("\n")+"\n\nSubtotal: "+rs(t)+"\nDelivery: "+(sh?rs(sh):"FREE")+"\n*Total: "+rs(t+sh)+"*\nPayment: "+pay+"\n\nName: "+nm+"\nPhone: "+ph+"\nCity: "+ct+"\nAddress: "+ad,wl="https://wa.me/"+WA+"?text="+encodeURIComponent(wm);$("owa").href=wl;if(WA_AUTO){try{window.open(wl,"_blank")}catch(e){}}cart={};save();$("md").classList.remove("on");$("okn").textContent="Order No: "+no;$("ok").classList.add("on");$("nm").value="";$("ph").value="";$("ct").value="";$("ad").value=""})
+ .catch(function(){toast("No internet connection. Please connect to the internet and press Order Confirm again.")})
  .then(function(){b.disabled=false;b.textContent="ORDER CONFIRM"})}
 // ===== PRODUCT PAGE =====
 var gi=0,gid=0,PQ=1;
@@ -334,7 +352,7 @@ function showP(id){var x=P1(id);if(!x){location.hash="";return}
  if(gid!=id){gid=id;gi=0;PQ=1}
  var ks=[x.id,x.id+"-2",x.id+"-3",x.id+"-4"],ok=function(k){return codeImg(x,k)};
  if(gi>0&&!ok(ks[gi]))gi=0;
- var th=ks.map(function(k,i){if(!ok(k))return"";return '<div class="'+(i==gi?'on':'')+'" style="background:'+bgk(x,k)+'" onclick="gi='+i+';route()">'+'</div>'}).join("");
+ var th=ks.map(function(k,i){if(!ok(k))return"";return '<div class="'+(i==gi?'on':'')+'" data-im="'+imPath(x,k)+'" style="background:'+bgk(x,k)+'" onclick="gi='+i+';route()">'+'</div>'}).join("");
  var isB=x.c=="Bedsheets",who=x.c=="Ladies"?"ladies":"gents",
  d=x.d||(isB?"Soft, durable "+x.f+" bedsheet. Comfortable, long-lasting and easy to wash.":"Premium "+x.f+" unstitched fabric for "+who+". Soft, comfortable and long-lasting. Get it stitched in your own style and size."),
  fe=x.feat||[(isB?"":"Unstitched ")+x.f+(isB?" bedsheet":" fabric")+(x.pc?" - "+x.pc:""),"Quality checked before dispatch","Cash on Delivery all over Pakistan","Exchange: please visit our shop"],
@@ -342,11 +360,11 @@ function showP(id){var x=P1(id);if(!x){location.hash="";return}
  row=function(a,b){return '<tr><td>'+a+'</td><td>'+b+'</td></tr>'},
  wm=encodeURIComponent("Assalam o Alaikum, I want to order: "+x.n+" ("+rs(x.p)+")"),
  rel=P.filter(function(p){return p.c==x.c&&p.id!=x.id}).slice(0,4).map(cardHTML).join("");
- $("pd").innerHTML='<a href="#shop" class="mu" style="display:inline-block;margin-bottom:14px">&larr; Back to shop</a><div class="pdw"><div><div class="gm" style="background:'+bgk(x,ks[gi])+'"></div><div class="th">'+th+'</div></div><div><div class="mu">'+x.c+' / '+x.f+'</div><h1 class="serif" style="color:var(--mar);font-size:30px;margin:4px 0 8px">'+x.n+'</h1><div class="price" style="font-size:24px">'+rs(x.p)+(x.s?'<s>'+rs(x.o)+'</s> <span class="badge" style="position:static;background:var(--mar);color:#fff">-'+sv+'%</span>':'')+'</div><p style="margin:10px 0">'+d+'</p><ul class="fl">'+fe.map(function(f){return'<li>'+f+'</li>'}).join("")+'</ul><table class="spec">'+row("Fabric",x.f)+row("Category",x.c+(isB?"":" Unstitched"))+(x.pc?row("Pieces / Length",x.pc):"")+row("Delivery","2-7 working days")+row("Delivery charges",ship(x.p)?rs(SHIP)+" (free above "+rs(FREE_ABOVE)+")":"Free")+row("Payment","Cash on Delivery / Bank transfer / JazzCash / Easypaisa")+row("Exchange","Visit our shop for exchange")+'</table><div class="q" style="margin:16px 0"><span>Quantity</span><button onclick="pq(-1)">-</button><b id="pqn">'+PQ+'</b><button onclick="pq(1)">+</button></div><div class="pbt"><button class="add" onclick="addN('+id+')">ADD TO CART</button><button class="chk" onclick="buyN('+id+')">BUY NOW</button></div><a class="wa" style="display:block;text-align:center" target="_blank" href="https://wa.me/'+WA+'?text='+wm+'">ASK / ORDER ON WHATSAPP</a></div></div><h2 class="t serif" style="margin:44px 0 16px">You may also like</h2><div class="grid">'+rel+'</div>';reveal()}
+ $("pd").innerHTML='<a href="#shop" class="mu" style="display:inline-block;margin-bottom:14px">&larr; Back to shop</a><div class="pdw"><div><div class="gm" data-im="'+imPath(x,ks[gi])+'" style="background:'+bgk(x,ks[gi])+'"></div><div class="th">'+th+'</div></div><div><div class="mu">'+x.c+' / '+x.f+'</div><h1 class="serif" style="color:var(--mar);font-size:30px;margin:4px 0 8px">'+x.n+'</h1><div class="price" style="font-size:24px">'+rs(x.p)+(x.s?'<s>'+rs(x.o)+'</s> <span class="badge" style="position:static;background:var(--mar);color:#fff">-'+sv+'%</span>':'')+'</div><p style="margin:10px 0">'+d+'</p><ul class="fl">'+fe.map(function(f){return'<li>'+f+'</li>'}).join("")+'</ul><table class="spec">'+row("Fabric",x.f)+row("Category",x.c+(isB?"":" Unstitched"))+(x.pc?row("Pieces / Length",x.pc):"")+row("Delivery","2-7 working days")+row("Delivery charges",ship(x.p)?rs(SHIP)+" (free above "+rs(FREE_ABOVE)+")":"Free")+row("Payment","Cash on Delivery / Bank transfer / JazzCash / Easypaisa")+row("Exchange","Visit our shop for exchange")+'</table><div class="q" style="margin:16px 0"><span>Quantity</span><button onclick="pq(-1)">-</button><b id="pqn">'+PQ+'</b><button onclick="pq(1)">+</button></div><div class="pbt"><button class="add" onclick="addN('+id+')">ADD TO CART</button><button class="chk" onclick="buyN('+id+')">BUY NOW</button></div><a class="wa" style="display:block;text-align:center" target="_blank" href="https://wa.me/'+WA+'?text='+wm+'">ASK / ORDER ON WHATSAPP</a></div></div><h2 class="t serif" style="margin:44px 0 16px">You may also like</h2><div class="grid">'+rel+'</div>';reveal();fixImgs()}
 function route(f){var m=/^#p(\d+)$/.exec(location.hash);
  if(m){$("home").style.display="none";$("pd").style.display="block";showP(+m[1]);if(f===true)window.scrollTo(0,0)}
  else{$("home").style.display="";$("pd").style.display="none";var el=document.getElementById(location.hash.slice(1));if(el)el.scrollIntoView()}}
-window.onhashchange=function(){route(true)};
+window.onhashchange=function(){route(true);checkPanel()};
 // ===== ANIMATIONS / TOAST =====
 var IO=window.IntersectionObserver?new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add("in");IO.unobserve(e.target)}})},{threshold:.08}):null;
 function reveal(){var n=document.querySelectorAll(".rv:not(.in)");for(var i=0;i<n.length;i++){IO?IO.observe(n[i]):n[i].classList.add("in")}}
@@ -391,12 +409,9 @@ function autoS(){clearInterval(ST);ST=setInterval(function(){slide(SI+1)},5000)}
  s.addEventListener("mouseenter",function(){clearInterval(ST)});s.addEventListener("mouseleave",autoS)})();
 slide(0);autoS();
 // ===== SLIDER PHOTOS: har slide ke peeche photo (SLIDES list upar settings mein hai) =====
-function slideBgs(){
- var hs=document.querySelectorAll("#sls .hero");
- for(var i=0;i<hs.length;i++){var u=SLIDES[i];if(!u)continue;
-  var d=document.createElement("div");d.className="sbg";
-  d.style.background="linear-gradient(rgba(0,0,0,.35),rgba(0,0,0,.55)),url("+u+"?v="+IMG_VER+") center/cover no-repeat";
-  hs[i].insertBefore(d,hs[i].firstChild)}}
+function slideBgs(){var hs=document.querySelectorAll("#sls .hero");
+ for(var i=0;i<hs.length;i++)(function(h,p){if(!p)return;findImg(p,function(u){if(!u)return;var d=document.createElement("div");d.className="sbg";
+  d.style.background="linear-gradient(rgba(0,0,0,.35),rgba(0,0,0,.55)),url("+u+"?v="+IMG_VER+") center/cover no-repeat";h.insertBefore(d,h.firstChild)})})(hs[i],SLIDES[i])}
 slideBgs();
 // ===== TOP HEADLINE: chalti hui patti. Headlines yahan se badlein =====
 var TICKER=["&#128293; SPECIAL SALE ON SELECTED PRODUCTS - LIMITED TIME! &#128293;","CASH ON DELIVERY ALL OVER PAKISTAN","FREE DELIVERY ON ORDERS ABOVE "+rs(FREE_ABOVE).toUpperCase(),"ORDER ONLINE AND CONFIRM ON WHATSAPP"];
@@ -419,6 +434,13 @@ function renderReviews(){var r=REVIEWS.filter(function(x){return x&&x.t});if(!r.
  var sum=0,h="";r.forEach(function(x){var n=Math.max(1,Math.min(5,x.stars||5));sum+=n;
   h+='<div class="rvc rv"><div class="st">'+"\u2605".repeat(n)+"\u2606".repeat(5-n)+'</div><p>'+esc(x.t)+'</p><b>'+esc(x.n||"Customer")+'</b>'+(x.city?'<span>'+esc(x.city)+'</span>':'')+'</div>'});
  $("rvg").innerHTML=h;$("rvs").textContent="\u2605 "+(sum/r.length).toFixed(1)+" average from "+r.length+" customer review"+(r.length>1?"s":"");$("rvw").style.display="block"}
+// ===== PHOTO CHECK: website ke link ke aakhir mein #check likh kar kholen, har photo ka haal dikhega =====
+function checkPanel(){if(location.hash!="#check")return;var old=$("chkp");if(old)old.remove();
+ var d=document.createElement("div");d.id="chkp";d.style.cssText="position:fixed;inset:10px;z-index:200;background:#fff;border:2px solid #7a1230;border-radius:10px;padding:14px;overflow:auto;font:13px/1.7 monospace";
+ d.innerHTML='<b>Photo check</b> <button style="float:right;padding:4px 12px" onclick="document.getElementById(\'chkp\').remove();location.hash=\'\'">Close</button><div id="chkl" style="margin-top:8px"></div>';document.body.appendChild(d);
+ var L=$("chkl"),items=SLIDES.concat(P.reduce(function(a,x){return a.concat([x.img].concat(x.imgs||[]))},[])).filter(Boolean);
+ items.forEach(function(p){var r=document.createElement("div");r.textContent="... checking "+p;L.appendChild(r);
+  findImg(p,function(u){r.textContent=!u?"MISSING (server par file nahi mili): "+p:u==p?"OK: "+p:"NAAM GHALAT: code mein "+p+" hai, asal file "+u+" hai";r.style.color=!u?"#c00":u==p?"#080":"#c60"})})}
 renderReviews();
-render();draw();route(true);reveal();
+render();draw();route(true);reveal();checkPanel();
 </script></body></html>
